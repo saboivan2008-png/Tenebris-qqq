@@ -1,0 +1,206 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Safety Net
+    match /{document=**} { 
+      allow read, write: if false; 
+    }
+
+    // Helpers
+    function isSignedIn() { 
+      return request.auth != null; 
+    }
+    
+    function incoming() { 
+      return request.resource.data; 
+    }
+    
+    function existing() { 
+      return resource.data; 
+    }
+
+    function isVerified() {
+      // Assuming Google Auth, email is verified
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    // Role helper - user role cannot be modified by user, must be 'member' on creation
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'Usc31@auru.space' ||
+        request.auth.token.email == 'usc31@auru.space' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+        (exists(/databases/$(database)/documents/authorized_admins/$(request.auth.uid)))
+      );
+    }
+
+    // Validation for User Profile
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['email', 'role', 'createdAt']) && 
+             data.keys().size() == 3 &&
+             data.email is string && data.email.size() <= 256 &&
+             data.role is string && (data.role == 'member' || data.role == 'admin') &&
+             data.createdAt == request.time;
+    }
+
+    // Validation for Newsletter Lead (Early Access)
+    function isValidNewsletterLead(data) {
+      return data.keys().hasAll(['email', 'source', 'createdAt']) &&
+             data.keys().size() == 3 &&
+             data.email is string && data.email.size() <= 256 &&
+             data.source is string && data.source.size() <= 50 &&
+             data.createdAt == request.time;
+    }
+
+    function isValidProduct(data) {
+      return data.keys().hasAll(['name', 'category', 'price', 'color', 'image', 'status', 'createdAt', 'updatedAt']) &&
+             data.keys().size() == 8 &&
+             data.name is string && data.name.size() <= 100 &&
+             data.category is string && data.category.size() <= 50 &&
+             data.price is string && data.price.size() <= 20 &&
+             data.color is string && data.color.size() <= 50 &&
+             data.image is string && data.image.size() <= 500 &&
+             data.status is string && (data.status == 'available' || data.status == 'sold_out' || data.status == 'hidden') &&
+             data.createdAt == request.time &&
+             data.updatedAt == request.time;
+    }
+
+    function isValidVehicle(data) {
+      return data.keys().hasAll(['name', 'type', 'status', 'createdAt', 'updatedAt']) &&
+             data.keys().size() == 5 &&
+             data.name is string && data.name.size() <= 100 &&
+             data.type is string && data.type.size() <= 50 &&
+             data.status is string && (data.status == 'available' || data.status == 'rented' || data.status == 'maintenance') &&
+             data.createdAt == request.time &&
+             data.updatedAt == request.time;
+    }
+
+    function isValidPartner(data) {
+      return data.keys().hasAll(['name', 'description', 'createdAt', 'updatedAt']) &&
+             data.keys().size() == 4 &&
+             data.name is string && data.name.size() <= 100 &&
+             data.description is string && data.description.size() <= 500 &&
+             data.createdAt == request.time &&
+             data.updatedAt == request.time;
+    }
+
+    match /users/{userId} {
+      // Users can read their own profile, Admins can read all
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      
+      // Users can create their own profile, forcing role to 'member'
+      allow create: if isVerified() && 
+                    request.auth.uid == userId && 
+                    isValidUserProfile(incoming()) &&
+                    incoming().role == 'member'; // Cannot self-assign admin
+
+      // Users cannot update role.
+      allow update: if isVerified() && 
+                    request.auth.uid == userId &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['email']) &&
+                    incoming().email is string && incoming().email.size() <= 256;
+    }
+
+    match /earlyAccess/{docId} {
+      // Anyone can submit their email for early access
+      allow create: if isValidNewsletterLead(incoming());
+      // Only admins can read or manage these leads
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /products/{docId} {
+      allow read: if existing().status != 'hidden' || isAdmin();
+      allow create: if isAdmin() && isValidProduct(incoming());
+      allow update: if isAdmin() && isValidProduct(incoming()); // Relaxed full update for admin CMS
+      allow delete: if isAdmin();
+    }
+
+    match /vehicles/{docId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidVehicle(incoming());
+      allow update: if isAdmin() && isValidVehicle(incoming());
+      allow delete: if isAdmin();
+    }
+
+    match /test/connection {
+      allow read: if true;
+    }
+
+    match /partners/{docId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidPartner(incoming());
+      allow update: if isAdmin() && isValidPartner(incoming());
+      allow delete: if isAdmin();
+    }
+
+    match /system_stats/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /authorized_admins/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /auru_trinity_leads/{docId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /work_applications/{docId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /trade_license_requests/{docId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /rental_bookings/{docId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /courier_requests/{docId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /solidarity_cases/{docId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /solidarity_volunteers/{docId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /trade_inquiries/{docId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /trade_secret_enclave/{docId} {
+      allow read, create: if true;
+      allow update, delete: if isAdmin();
+    }
+
+    match /trade_secure_rooms/{docId} {
+      allow read, create, update: if true;
+      allow delete: if isAdmin();
+    }
+
+    match /orders/{docId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /driveAttachments/{docId} {
+      allow read, write: if isAdmin();
+    }
+  }
+}

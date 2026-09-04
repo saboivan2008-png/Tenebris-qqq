@@ -1,0 +1,11 @@
+name = "usc-underground"
+compatibility_date = "2024-03-20"
+
+# Nastavenie pre frontend (Vite zložka dist)
+pages_build_output_dir = "dist"
+
+# Prepojenie nášho R2 Bucket-u priamo do Cloudflare ekosystému
+[[r2_buckets]]
+binding = "USC_ASSETS"
+bucket_name = "usc-assets"
+preview_bucket_name = "usc-assets-dev"

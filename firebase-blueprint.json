@@ -1,0 +1,131 @@
+{
+  "entities": {
+    "userProfile": {
+      "title": "User Profile",
+      "description": "Stores basic profile information of an authenticated user.",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "role": {
+          "type": "string",
+          "enum": ["member", "admin"],
+          "maxLength": 20
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp in ISO format or firestore timestamp"
+        }
+      },
+      "required": ["email", "role", "createdAt"]
+    },
+    "newsletterLead": {
+      "title": "Newsletter Lead",
+      "description": "Email signup for early access.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "maxLength": 256 },
+        "source": { "type": "string", "maxLength": 50 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["email", "source", "createdAt"]
+    },
+    "product": {
+      "title": "U.S.W Product",
+      "description": "Store items for the U.S.W Shop.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 100 },
+        "category": { "type": "string", "maxLength": 50 },
+        "price": { "type": "string", "maxLength": 20 },
+        "color": { "type": "string", "maxLength": 50 },
+        "image": { "type": "string", "maxLength": 500 },
+        "status": { "type": "string", "enum": ["available", "sold_out", "hidden"], "maxLength": 20 },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["name", "category", "price", "color", "image", "status", "createdAt", "updatedAt"]
+    },
+    "vehicle": {
+      "title": "Rent a Wheel Vehicle",
+      "description": "Vehicles available for rent.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 100 },
+        "type": { "type": "string", "maxLength": 50 },
+        "status": { "type": "string", "enum": ["available", "rented", "maintenance"], "maxLength": 20 },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["name", "type", "status", "createdAt", "updatedAt"]
+    },
+    "partner": {
+      "title": "U.S.C Partner",
+      "description": "Partner companies and agencies.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["name", "description", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "userProfile",
+      "description": "User profiles stored by uid."
+    },
+    "earlyAccess/{docId}": {
+      "schema": "newsletterLead",
+      "description": "Early access signups from the promo page."
+    },
+    "products/{docId}": {
+      "schema": "product",
+      "description": "Shop products."
+    },
+    "vehicles/{docId}": {
+      "schema": "vehicle",
+      "description": "Fleet vehicles."
+    },
+    "partners/{docId}": {
+      "schema": "partner",
+      "description": "Agency partners."
+    },
+    "orders/{docId}": {
+      "schema": "product",
+      "description": "Streetwear shop orders."
+    },
+    "work_applications/{docId}": {
+      "schema": "newsletterLead",
+      "description": "U.S.C. Work applications."
+    },
+    "auru_trinity_leads/{docId}": {
+      "schema": "newsletterLead",
+      "description": "Auru Trinity B2B inquiries."
+    },
+    "rental_bookings/{docId}": {
+      "schema": "vehicle",
+      "description": "Rent a Wheel vehicle bookings."
+    },
+    "solidarity_cases/{docId}": {
+      "schema": "newsletterLead",
+      "description": "Solidarity emergency cases."
+    },
+    "trade_inquiries/{docId}": {
+      "schema": "newsletterLead",
+      "description": "B2B Trade Zakasajee inquiries."
+    },
+    "authorized_admins/{docId}": {
+      "schema": "userProfile",
+      "description": "Authorized admin users."
+    },
+    "system_stats/{docId}": {
+      "schema": "userProfile",
+      "description": "Ecosystem and promo performance metrics."
+    }
+  }
+}
