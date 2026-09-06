@@ -48,6 +48,7 @@ import {
 } from 'lucide-react';
 import type { MatrixPillar, DispatchMessage, MultitaskThread } from '../../types';
 import { trackMatrixDispatch, trackPillarEngagement } from '../../lib/analytics';
+import VoiceRecognitionInterface from './VoiceRecognitionInterface';
 
 interface GlobalCopilotChatProps {
   defaultOpen?: boolean;
@@ -205,8 +206,12 @@ export default function GlobalCopilotChat({ defaultOpen = false }: GlobalCopilot
 
   // Clear current thread messages
   const clearCurrentThread = () => {
+    clearThreadById(activeThreadId);
+  };
+
+  const clearThreadById = (targetId: string) => {
     setThreads(prev => prev.map(t => {
-      if (t.id === activeThreadId) {
+      if (t.id === targetId) {
         return {
           ...t,
           status: 'idle',
@@ -223,6 +228,22 @@ export default function GlobalCopilotChat({ defaultOpen = false }: GlobalCopilot
       }
       return t;
     }));
+  };
+
+  const switchThreadPillar = (targetId: string, pillar: MatrixPillar) => {
+    setThreads(prev => prev.map(t => {
+      if (t.id === targetId) {
+        return { ...t, pillar };
+      }
+      return t;
+    }));
+  };
+
+  const stopSpeech = () => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    setSpeakingMsgId(null);
   };
 
   // Sync to localStorage
@@ -447,15 +468,20 @@ export default function GlobalCopilotChat({ defaultOpen = false }: GlobalCopilot
             </div>
             <div className="text-left">
               <div className="leading-tight font-black">Trinity Core AI</div>
-              <div className="text-[10px] text-zinc-400 group-hover:text-black font-mono font-normal">
+              <div className="text-[10px] text-zinc-400 group-hover:text-black font-mono font-normal flex items-center gap-1">
                 {threads.filter(t => t.status === 'running').length > 0 
                   ? `⚡ ${threads.filter(t => t.status === 'running').length} bežiaca úloha` 
-                  : `Tenebris • U.S.C. Dispečing`}
+                  : `Hlas & Text • Dispečing`}
               </div>
             </div>
-            <span className="hidden sm:inline bg-zinc-900 group-hover:bg-black group-hover:text-emerald-400 text-zinc-400 px-1.5 py-0.5 text-[10px] font-mono border border-zinc-700">
-              Ctrl+K
-            </span>
+            <div className="flex items-center gap-1">
+              <span className="hidden sm:inline bg-zinc-900 group-hover:bg-black group-hover:text-emerald-400 text-zinc-400 px-1.5 py-0.5 text-[10px] font-mono border border-zinc-700">
+                Ctrl+K
+              </span>
+              <span className="bg-emerald-950/80 group-hover:bg-black text-emerald-400 p-1 border border-emerald-800/80 group-hover:border-black" title="Hlasové ovládanie povolené">
+                <Mic className="w-3 h-3" />
+              </span>
+            </div>
           </motion.button>
         </div>
       )}
@@ -645,6 +671,10 @@ export default function GlobalCopilotChat({ defaultOpen = false }: GlobalCopilot
                   onToggleSpeech={toggleSpeech}
                   speakingMsgId={speakingMsgId}
                   onNavigate={(path) => navigate(path)}
+                  onClearThread={() => clearThreadById(activeThread.id)}
+                  onNewThread={(pillar) => createNewThread(pillar)}
+                  onSwitchPillar={(pillar) => switchThreadPillar(activeThread.id, pillar)}
+                  onStopSpeech={stopSpeech}
                 />
 
                 {/* Secondary Chat Pane (When Split Mode is Active) */}
@@ -659,6 +689,10 @@ export default function GlobalCopilotChat({ defaultOpen = false }: GlobalCopilot
                     onToggleSpeech={toggleSpeech}
                     speakingMsgId={speakingMsgId}
                     onNavigate={(path) => navigate(path)}
+                    onClearThread={() => clearThreadById(secondaryThread.id)}
+                    onNewThread={(pillar) => createNewThread(pillar)}
+                    onSwitchPillar={(pillar) => switchThreadPillar(secondaryThread.id, pillar)}
+                    onStopSpeech={stopSpeech}
                     secondaryHeader={
                       <div className="bg-zinc-900 border-b border-zinc-800 p-1.5 flex items-center justify-between text-xs font-mono">
                         <span className="text-zinc-400 font-bold">Paralelná Úloha 2:</span>
@@ -696,6 +730,10 @@ interface ChatPaneProps {
   onToggleSpeech?: (text: string, id: string) => void;
   speakingMsgId?: string | null;
   onNavigate?: (path: string) => void;
+  onClearThread: () => void;
+  onNewThread: (pillar?: MatrixPillar) => void;
+  onSwitchPillar: (pillar: MatrixPillar) => void;
+  onStopSpeech: () => void;
 }
 
 function ChatPane({
@@ -708,10 +746,13 @@ function ChatPane({
   secondaryHeader,
   onToggleSpeech,
   speakingMsgId,
-  onNavigate
+  onNavigate,
+  onClearThread,
+  onNewThread,
+  onSwitchPillar,
+  onStopSpeech
 }: ChatPaneProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [isListening, setIsListening] = useState(false);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -724,41 +765,7 @@ function ChatPane({
     }
   };
 
-  // Speech to Text (Diktovanie hlasom)
-  const toggleSpeechRecognition = () => {
-    const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRec) {
-      alert("Hlasové diktovanie nie je podporované v tomto prehliadači (odporúčame Google Chrome alebo Edge).");
-      return;
-    }
-
-    if (isListening) {
-      setIsListening(false);
-      return;
-    }
-
-    try {
-      const recognition = new SpeechRec();
-      recognition.lang = 'sk-SK';
-      recognition.continuous = false;
-      recognition.interimResults = false;
-
-      recognition.onstart = () => setIsListening(true);
-      recognition.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        if (transcript) {
-          const newDraft = thread.inputDraft ? `${thread.inputDraft} ${transcript}` : transcript;
-          onDraftChange(newDraft);
-        }
-        setIsListening(false);
-      };
-      recognition.onerror = () => setIsListening(false);
-      recognition.onend = () => setIsListening(false);
-      recognition.start();
-    } catch (e) {
-      setIsListening(false);
-    }
-  };
+  const lastMatrixMessage = [...thread.messages].reverse().find(m => m.role === 'matrix');
 
   return (
     <div className="flex-1 flex flex-col h-full bg-zinc-950 overflow-hidden">
@@ -825,19 +832,19 @@ function ChatPane({
                 <div className="mt-3 pt-2.5 border-t border-zinc-800/80 flex flex-wrap items-center gap-1.5 text-[10px] font-mono">
                   <span className="text-zinc-500 font-bold uppercase text-[9px] mr-0.5">Rýchly skok:</span>
                   <button 
-                    onClick={() => onNavigate('/rent-a-wheel')}
+                    onClick={() => onNavigate('/rent')}
                     className="px-1.5 py-0.5 bg-zinc-950 hover:bg-emerald-600 hover:text-black text-emerald-400 border border-zinc-800 flex items-center gap-1 transition-colors"
                   >
                     <Truck className="w-2.5 h-2.5" /> Autopožičovňa
                   </button>
                   <button 
-                    onClick={() => onNavigate('/usc-work')}
+                    onClick={() => onNavigate('/work')}
                     className="px-1.5 py-0.5 bg-zinc-950 hover:bg-purple-600 hover:text-white text-purple-400 border border-zinc-800 flex items-center gap-1 transition-colors"
                   >
                     <Briefcase className="w-2.5 h-2.5" /> U.S.C. Work
                   </button>
                   <button 
-                    onClick={() => onNavigate('/usw')}
+                    onClick={() => onNavigate('/shop')}
                     className="px-1.5 py-0.5 bg-zinc-950 hover:bg-pink-600 hover:text-white text-pink-400 border border-zinc-800 flex items-center gap-1 transition-colors"
                   >
                     <Layers className="w-2.5 h-2.5" /> U.S.W. Wear
@@ -849,7 +856,7 @@ function ChatPane({
                     <ShieldCheck className="w-2.5 h-2.5" /> Trade Zakasajee
                   </button>
                   <button 
-                    onClick={() => onNavigate('/ritual-369')}
+                    onClick={() => onNavigate('/ritual369')}
                     className="px-1.5 py-0.5 bg-zinc-950 hover:bg-yellow-500 hover:text-black text-yellow-400 border border-zinc-800 flex items-center gap-1 transition-colors"
                   >
                     <Crown className="w-2.5 h-2.5" /> 369 Vault
@@ -876,31 +883,37 @@ function ChatPane({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Box */}
-      <div className="p-3 bg-zinc-900 border-t-2 border-zinc-800">
+      {/* Voice Recognition Interface (Web Speech API Spoken Commands & Live Dictation) */}
+      <VoiceRecognitionInterface
+        onSendCommand={(text) => onSendMessage(text)}
+        onClearThread={onClearThread}
+        onNewThread={onNewThread}
+        onSwitchPillar={onSwitchPillar}
+        onNavigate={(path) => onNavigate && onNavigate(path)}
+        onReadLastResponse={() => {
+          if (lastMatrixMessage && onToggleSpeech) {
+            onToggleSpeech(lastMatrixMessage.text, lastMatrixMessage.id);
+          }
+        }}
+        onStopSpeech={onStopSpeech}
+        onDraftChange={onDraftChange}
+        currentDraft={thread.inputDraft}
+        isAiProcessing={thread.status === 'running'}
+        lastMatrixResponse={lastMatrixMessage?.text}
+        activePillar={thread.pillar}
+      />
+
+      {/* Manual Input Box (Hybrid: Type or Speak) */}
+      <div className="p-3 bg-zinc-900 border-t border-zinc-800">
         <div className="flex gap-2">
           <textarea
             value={thread.inputDraft}
             onChange={(e) => onDraftChange(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={`Zadaj príkaz pre ${thread.title}... (alebo použi mikrofón)`}
+            placeholder={`Zadaj príkaz pre ${thread.title}... (alebo hovor hlasovými príkazmi)`}
             rows={2}
             className="flex-1 bg-zinc-950 border border-zinc-800 focus:border-emerald-500 p-2.5 text-xs text-white placeholder-zinc-500 font-mono resize-none focus:outline-none"
           />
-
-          {/* Speech-to-Text Microphone Button */}
-          <button
-            type="button"
-            onClick={toggleSpeechRecognition}
-            className={`px-3 border text-xs font-bold flex items-center justify-center transition-all ${
-              isListening
-                ? 'bg-red-600 text-white border-red-500 animate-pulse shadow-[0_0_12px_rgba(239,68,68,0.8)]'
-                : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border-zinc-700'
-            }`}
-            title={isListening ? "Nahrávanie aktívne... Klikni pre ukončenie" : "Hlasové diktovanie (Mikrofón)"}
-          >
-            {isListening ? <MicOff className="w-4 h-4 text-white" /> : <Mic className="w-4 h-4 text-emerald-400" />}
-          </button>
 
           {/* Send Button */}
           <button
@@ -916,7 +929,7 @@ function ChatPane({
         <div className="flex items-center justify-between text-[10px] font-mono text-zinc-500 mt-1.5 px-1">
           <span className="truncate flex items-center gap-1.5 text-emerald-400">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
-            TRINITY / TENEBRIS CORE AI • U.S.C. DISPEČING • auru.space
+            TRINITY / TENEBRIS CORE AI • U.S.C. DISPEČING • WEB SPEECH API
           </span>
           <span>Shift+Enter = Nový riadok</span>
         </div>

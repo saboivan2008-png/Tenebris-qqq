@@ -1,7 +1,9 @@
 {
   "name": "Underground Street Collective",
   "description": "Oficiálny web pre Underground Street Collective. Podzemie, ulica, matrix, 369. Zastrešujeme A.I Auru_trinity, U.S.W oblečenie, Rent a wheel, U.S.C work a Trade Zakasajee.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": [
+    "microphone"
+  ],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]

@@ -1143,7 +1143,7 @@ Vráť striktný JSON objekt v tomto formáte:
   });
 
   // ==========================================
-  // 📦 ONE-CLICK FULL CODEBASE ARCHIVE DOWNLOAD
+  // 📦 ONE-CLICK FULL CODEBASE ARCHIVE DOWNLOAD (.tar.gz and .zip)
   // ==========================================
   app.get("/api/project/download-archive", (req: any, res: any) => {
     const archivePath = path.join(process.cwd(), "tenebris-full-project.tar.gz");
@@ -1154,6 +1154,45 @@ Vráť striktný JSON objekt v tomto formáte:
     } else {
       return res.status(404).json({ error: "Archív sa generuje alebo nebol nájdený." });
     }
+  });
+
+  app.get("/api/project/download-zip", (req: any, res: any) => {
+    const zipPath = path.join(process.cwd(), "tenebris-full-project.zip");
+    if (fs.existsSync(zipPath)) {
+      res.setHeader("Content-Disposition", 'attachment; filename="tenebris-full-project.zip"');
+      res.setHeader("Content-Type", "application/zip");
+      return res.sendFile(zipPath);
+    } else {
+      return res.status(404).json({ error: "ZIP archív nebol nájdený." });
+    }
+  });
+
+  // ==========================================
+  // 🌐 MULTI-DOMAIN ROUTING (auru.space & aurutrinity.online)
+  // ==========================================
+  app.use((req: any, res: any, next: any) => {
+    const host = (req.headers["x-forwarded-host"] || req.headers.host || req.hostname || "").toLowerCase();
+    
+    // If accessing via aurutrinity.online on root, redirect directly to Trinity AI Matrix console
+    if ((host.includes("aurutrinity.online") || host.includes("trinity.auru.space")) && req.path === "/") {
+      return res.redirect(302, "/trinity");
+    }
+    
+    next();
+  });
+
+  app.get("/api/domain-info", (req: any, res: any) => {
+    const host = (req.headers["x-forwarded-host"] || req.headers.host || req.hostname || "").toLowerCase();
+    return res.json({
+      activeHost: host,
+      domains: {
+        primary: "auru.space",
+        aiDispecing: "aurutrinity.online",
+        edgeWorker: "tenebris-core.uscolective.workers.dev"
+      },
+      status: "operational",
+      timestamp: new Date().toISOString()
+    });
   });
 
   // ==========================================
